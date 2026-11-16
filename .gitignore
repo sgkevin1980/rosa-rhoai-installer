@@ -1,0 +1,49 @@
+# --- Local runtime / secrets (never commit) ---
+state/*
+!state/.gitkeep
+!state/README.md
+# belt-and-suspenders for rendered/local artifacts
+nodepool-*-*.yaml
+access-*.txt
+
+# Access details & env dumps
+**/access-*.txt
+**/cluster.env
+*.env
+!lib/defaults.env
+!examples/*.env.example
+*.env.local
+
+# Kubeconfigs
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+**/auth/kubeconfig
+
+# Terraform leftovers if copied into this tree
+*.tfvars
+!templates/*.tmpl
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log
+crash.*.log
+
+# Logs
+*.log
+logs/
+
+# OS / editor
+.DS_Store
+**/.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+
+# Common credential filename patterns
+*.pem
+*.key
+credentials
+credentials.json
+credentials.csv

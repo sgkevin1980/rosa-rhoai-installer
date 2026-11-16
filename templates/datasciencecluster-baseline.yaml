@@ -1,0 +1,47 @@
+# Baseline DataScienceCluster if the operator has not created default-dsc yet.
+# kueue stays Unmanaged — sno-enable installs Red Hat Build of Kueue.
+# aigateway / MaaS are activated by sno-enable-all-features-35.sh.
+apiVersion: datasciencecluster.opendatahub.io/v2
+kind: DataScienceCluster
+metadata:
+  name: default-dsc
+  labels:
+    app.kubernetes.io/name: datasciencecluster
+spec:
+  components:
+    dashboard:
+      managementState: Managed
+    workbenches:
+      managementState: Managed
+      workbenchNamespace: rhods-notebooks
+    aipipelines:
+      managementState: Managed
+      argoWorkflowsControllers:
+        managementState: Managed
+    kserve:
+      managementState: Managed
+      defaultDeploymentMode: RawDeployment
+      rawDeploymentServiceConfig: Headed
+      nim:
+        managementState: Managed
+    kueue:
+      managementState: Unmanaged
+      defaultClusterQueueName: default
+      defaultLocalQueueName: default
+    ray:
+      managementState: Managed
+    trainer:
+      managementState: Removed
+    trainingoperator:
+      managementState: Removed
+    modelregistry:
+      managementState: Managed
+      registriesNamespace: rhoai-model-registries
+    trustyai:
+      managementState: Managed
+    feastoperator:
+      managementState: Removed
+    llamastackoperator:
+      managementState: Removed
+    mlflowoperator:
+      managementState: Managed
