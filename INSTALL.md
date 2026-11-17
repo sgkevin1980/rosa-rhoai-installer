@@ -72,18 +72,31 @@ Defaults: `lib/defaults.env`. Generated configs: `templates/` → cluster tfvars
 
 ## Re-pull GitHub repos
 
-`./install.sh` **clones if missing**; it does **not** pull every run.
+### Update this installer (already cloned)
+
+```bash
+cd /path/to/rosa-rhoai-installer
+git pull origin main
+```
+
+Then continue as usual:
+
+```bash
+export AWS_PROFILE=rhdp_demo
+./install.sh
+```
+
+### Update sibling repos (optional)
+
+`./install.sh` **clones siblings if missing**; it does **not** pull them every run.
 
 ```bash
 cd /path/to/parent   # folder that contains the siblings
 
-git -C rosa-rhoai-installer pull
 git -C validated-pattern-terraform-rosa pull
 git -C rhoai-sno-setup-guide pull          # if using Phase 2
 git -C RHOAI-Toolkit pull                  # if using Phase 2
 ```
-
-Then re-run `./install.sh` (or `--from=…` / `--plan-only` as needed).
 
 ---
 
