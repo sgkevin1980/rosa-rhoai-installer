@@ -1,68 +1,59 @@
 # rosa-rhoai-installer
 
-Guided macOS installer for a **public ROSA HCP 4.22** cluster (Tokyo default, **2× m6a.xlarge**) plus optional **OpenShift AI 3.5** platform-ready (Karpenter CPU/GPU on-demand NodePools, NFD, GPU Operator, RHODS, MaaS).
-
-| Doc | Purpose |
-|-----|---------|
-| [INSTALL.md](./INSTALL.md) | Step-by-step human guide |
-| [SPEC.md](./SPEC.md) | Product boundaries + engineering principles |
+Thin macOS wrapper: prompts → write configs → run `make cluster.*` in the sibling Terraform pattern repo. Optional OpenShift AI Phase 2.
 
 ```bash
-./install.sh                 # Phase 1 → confirm → optional Phase 2
+./install.sh                 # main entry
 ./phase1/install_rosa.sh     # ROSA only
-./phase2/install_rhoai.sh    # OpenShift AI only (existing kubeconfig)
-./tests/smoke.sh             # Static checks (no cloud / no secrets)
+./phase2/install_rhoai.sh    # OpenShift AI only
 ```
+
+Full guide: [INSTALL.md](./INSTALL.md)
 
 ## Layout
 
 ```text
-install.sh              # Orchestrator
-phase1/install_rosa.sh  # ROSA HCP
-phase2/install_rhoai.sh # OpenShift AI 3.5
-lib/                    # Shared helpers + defaults
-templates/              # tfvars, NodePools, DSC (no secrets)
-docs/images/            # Console screenshots for manual gates
-examples/               # Non-secret examples only
-state/                  # LOCAL ONLY — gitignored runtime data
-tests/smoke.sh          # bash -n + structure checks
+install.sh          # orchestrator
+phase1/             # ROSA
+phase2/             # OpenShift AI
+lib/                # shared helpers + defaults.env
+templates/          # files the installer writes/applies (see below)
+docs/images/        # screenshots for INSTALL.md manual steps
+tests/smoke.sh      # static checks
+state/              # local runtime (gitignored)
 ```
 
-## Sibling repositories (required)
-
-This installer is a **wrapper**. It does **not** contain the Terraform Makefiles.  
-By default it expects these directories **next to** `rosa-rhoai-installer/`:
+Sibling (outside this repo):
 
 ```text
 parent/
-  rosa-rhoai-installer/                 # this repo
-  validated-pattern-terraform-rosa/     # REQUIRED for Phase 1 (make cluster.<name>.*)
-  rhoai-sno-setup-guide/                # REQUIRED for Phase 2
-  RHOAI-Toolkit/                        # REQUIRED for HardwareProfile
+  rosa-rhoai-installer/
+  validated-pattern-terraform-rosa/   # Terraform — clone once by install.sh
+  rhoai-sno-setup-guide/              # Phase 2
+  RHOAI-Toolkit/                      # Phase 2
 ```
 
-If you only clone this GitHub repo, Phase 1 fails with:
+## What `templates/` is for
 
-`make: *** No rule to make target 'cluster.<name>.init'`
+Filled-in / copied by the installer — **not** Terraform modules:
 
-because `make` was not run from `validated-pattern-terraform-rosa/` (that repo defines `cluster.%`).
+| File | Used by |
+|------|---------|
+| `terraform.tfvars.tmpl` | Phase 1 → `clusters/<name>/terraform.tfvars` |
+| `nodepool-cpu.yaml.tmpl` / `nodepool-gpu.yaml.tmpl` | Phase 2 → Karpenter NodePools |
+| `datasciencecluster-baseline.yaml` | Phase 2 → DSC |
 
-Override paths if needed:
+Change defaults for new clusters in `lib/defaults.env` and these templates.
+
+## Re-pull upstream (plain git)
 
 ```bash
-export VALIDATED_PATTERN_DIR=/path/to/validated-pattern-terraform-rosa
-export SNO_GUIDE_DIR=/path/to/rhoai-sno-setup-guide
-export TOOLKIT_DIR=/path/to/RHOAI-Toolkit
+git -C ../validated-pattern-terraform-rosa pull
+# optional Phase 2:
+git -C ../rhoai-sno-setup-guide pull
+git -C ../RHOAI-Toolkit pull
 ```
 
 ## Security
 
-- **Never commit** Access Keys, Secret Keys, OCM tokens, kubeconfigs, or `state/access-*.txt`.
-- Secrets are prompted at runtime and stored under `~/.aws/`, `~/.config/ocm/`, or gitignored `state/`.
-- Before publishing: run `./tests/smoke.sh` and confirm `git status` does not list `state/` files.
-- Console screenshots under `docs/images/` are generic UI examples; account IDs are redacted where shown.
-
-**Manual (browser only):** enable ROSA HCP, link AWS↔Red Hat billing, paste OCM offline token.  
-**Automated in preflight:** OCM IAM role link (`rosa create ocm-role`) when missing.
-
-**Out of scope (v1):** private/zero-egress, model smoke, Playground, Spot NodePools.
+Never commit keys, OCM tokens, kubeconfigs, or `state/`.

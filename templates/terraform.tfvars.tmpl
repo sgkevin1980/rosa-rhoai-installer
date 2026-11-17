@@ -4,6 +4,9 @@
 cluster_name = "__CLUSTER_NAME__"
 
 openshift_version = "__OPENSHIFT_VERSION__"
+# Root module channel_group (default stable). Do not set `channel` unless you
+# intentionally use Y-stream upgrade path (mutually exclusive upstream).
+channel_group = "stable"
 
 network_type = "public"
 zero_egress  = false
@@ -11,9 +14,11 @@ private      = false
 region       = "__REGION__"
 vpc_cidr     = "__VPC_CIDR__"
 
-multi_az = false
+# true = private/public subnets in multiple AZs (needed for AZ-specific GPU capacity)
+multi_az = __MULTI_AZ__
 
 # Platform floor — ON-DEMAND only
+# With multi_az=true, min/max are per-AZ (not cluster totals)
 default_instance_type = "__INSTANCE_TYPE__"
 default_min_replicas  = __MIN_REPLICAS__
 default_max_replicas  = __MAX_REPLICAS__

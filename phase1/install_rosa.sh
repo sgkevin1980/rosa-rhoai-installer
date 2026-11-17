@@ -10,7 +10,7 @@
 #   ./phase1/install_rosa.sh --force
 #
 # Steps: tools → aws → preflight → inputs → provision → verify
-# Default AWS profile: rhdp_demo | Default workers: 2× m6a.xlarge
+# Default AWS profile: rhdp_demo | Default: multi-AZ, 1× m6a.xlarge per AZ
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -106,6 +106,9 @@ step_tools() {
   oc version --client || true
   terraform version
   ok "All required tools are available"
+
+  # Auto-clone Terraform pattern (and AI deps) beside this installer if missing
+  ensure_dependency_repos all
 }
 
 # ─── aws (RHDP AK/SK) ────────────────────────────────────────────────
@@ -352,6 +355,7 @@ step_inputs() {
   log "Step inputs — cluster settings"
   echo "Defaults: public Tokyo ROSA HCP 4.22. See INSTALL.md Step 1.2."
   echo
+  ensure_dependency_repos phase1
   if [[ -f "$CLUSTER_ENV" ]]; then
     # shellcheck source=/dev/null
     set -a; source "$CLUSTER_ENV"; set +a
@@ -369,7 +373,13 @@ step_inputs() {
   [[ "$NETWORK_TYPE" == "public" ]] || die "v1 supports public only."
 
   prompt AWS_PROFILE "AWS profile" "${AWS_PROFILE:-$DEFAULT_AWS_PROFILE}"
+  prompt MULTI_AZ "Multi-AZ VPC/subnets (yes/no)" "$([[ "${DEFAULT_MULTI_AZ}" == "true" ]] && echo yes || echo no)"
+  MULTI_AZ_BOOL=true
+  [[ "$MULTI_AZ" =~ ^[Yy] ]] || MULTI_AZ_BOOL=false
   prompt INSTANCE_TYPE "Default worker instance type" "${DEFAULT_INSTANCE_TYPE}"
+  if [[ "$MULTI_AZ_BOOL" == "true" ]]; then
+    echo "(Multi-AZ: min/max replicas are per availability zone, not cluster totals.)"
+  fi
   prompt MIN_REPLICAS "Default worker replicas (min)" "${DEFAULT_MIN_REPLICAS}"
   prompt MAX_REPLICAS "Default worker replicas (max)" "${DEFAULT_MAX_REPLICAS}"
   prompt VPC_CIDR "VPC CIDR" "${DEFAULT_VPC_CIDR}"
@@ -393,6 +403,7 @@ Refuse to overwrite. Pick another name, or re-run with --force."
     -e "s|__OPENSHIFT_VERSION__|${OPENSHIFT_VERSION}|g" \
     -e "s|__REGION__|${REGION}|g" \
     -e "s|__VPC_CIDR__|${VPC_CIDR}|g" \
+    -e "s|__MULTI_AZ__|${MULTI_AZ_BOOL}|g" \
     -e "s|__INSTANCE_TYPE__|${INSTANCE_TYPE}|g" \
     -e "s|__MIN_REPLICAS__|${MIN_REPLICAS}|g" \
     -e "s|__MAX_REPLICAS__|${MAX_REPLICAS}|g" \
@@ -409,6 +420,7 @@ AWS_REGION="${REGION}"
 AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"
 OPENSHIFT_VERSION="${OPENSHIFT_VERSION}"
 NETWORK_TYPE="${NETWORK_TYPE}"
+MULTI_AZ="${MULTI_AZ_BOOL}"
 INSTANCE_TYPE="${INSTANCE_TYPE}"
 MIN_REPLICAS="${MIN_REPLICAS}"
 MAX_REPLICAS="${MAX_REPLICAS}"
@@ -431,14 +443,7 @@ step_provision() {
   export RHCS_TOKEN
   rosa_login
 
-  [[ -d "$VALIDATED_PATTERN_DIR" ]] || die "Missing validated-pattern dir: $VALIDATED_PATTERN_DIR
-Clone https://github.com/rh-mobb/validated-pattern-terraform-rosa (or your fork) as a sibling of rosa-rhoai-installer/,
-or set VALIDATED_PATTERN_DIR to that checkout."
-  [[ -f "${VALIDATED_PATTERN_DIR}/Makefile" ]] || die "No Makefile in $VALIDATED_PATTERN_DIR — wrong path (not the Terraform ROSA pattern repo)."
-  if ! grep -q 'cluster\.%:' "${VALIDATED_PATTERN_DIR}/Makefile"; then
-    die "Makefile in $VALIDATED_PATTERN_DIR has no cluster.% rule.
-You are pointing at the wrong repo, or an outdated checkout. Expected validated-pattern-terraform-rosa."
-  fi
+  ensure_dependency_repos phase1
   [[ -f "${TFVARS_PATH:-}" ]] || die "Missing terraform.tfvars — re-run with --from=inputs"
   [[ -d "${CLUSTER_DIR:-}" ]] || die "Missing cluster dir ${CLUSTER_DIR:-} — re-run with --from=inputs"
 

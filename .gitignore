@@ -11,7 +11,6 @@ access-*.txt
 **/cluster.env
 *.env
 !lib/defaults.env
-!examples/*.env.example
 *.env.local
 
 # Kubeconfigs

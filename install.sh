@@ -44,17 +44,31 @@ done
 
 require_macos
 
-# Ensure default profile name is visible / inherited
+# Ensure default profile name is visible / inherited by child scripts
 export AWS_PROFILE="${AWS_PROFILE:-$DEFAULT_AWS_PROFILE}"
 
+# Sibling paths (override with export … before running if your layout differs)
+export VALIDATED_PATTERN_DIR="${VALIDATED_PATTERN_DIR:-$WORKSPACE_ROOT/validated-pattern-terraform-rosa}"
+export VALIDATED_PATTERN_GIT_URL="${VALIDATED_PATTERN_GIT_URL:-https://github.com/rh-mobb/validated-pattern-terraform-rosa.git}"
+export VALIDATED_PATTERN_GIT_REF="${VALIDATED_PATTERN_GIT_REF:-main}"
+export SNO_GUIDE_DIR="${SNO_GUIDE_DIR:-$WORKSPACE_ROOT/rhoai-sno-setup-guide}"
+export TOOLKIT_DIR="${TOOLKIT_DIR:-$WORKSPACE_ROOT/RHOAI-Toolkit}"
+
 log "rosa-rhoai-installer"
-echo "Spec: SPEC.md | Guide: INSTALL.md"
-echo "Default AWS profile: ${AWS_PROFILE} (override with export AWS_PROFILE=...)"
-echo "Phase 1 workers: 2× m6a.xlarge | AI capacity: Karpenter NodePools in Phase 2 only"
+echo "Guide: INSTALL.md | Defaults: multi-AZ, 1× m6a.xlarge/AZ | profile=${AWS_PROFILE}"
+echo "Pattern: ${VALIDATED_PATTERN_DIR}"
 echo
 
 if [[ "$PHASE2_ONLY" == "true" ]]; then
+  ensure_dependency_repos phase2
+  export SNO_GUIDE_DIR TOOLKIT_DIR
   exec "${SCRIPT_DIR}/phase2/install_rhoai.sh" "${PASSTHRU[@]}"
+fi
+
+# Clone sibling pattern if missing (re-pull: git -C "$VALIDATED_PATTERN_DIR" pull)
+if [[ "$TOOLS_ONLY" != "true" ]]; then
+  ensure_dependency_repos phase1
+  export VALIDATED_PATTERN_DIR
 fi
 
 # Phase 1 (prints Console / API / Username / Password at the end)

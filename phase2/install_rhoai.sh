@@ -8,7 +8,7 @@
 #
 # Steps: nodepools → nfd_gpu → rhods → sno → hardware → verify
 # NodePools are created first so Pending AI pods can scale Karpenter CPU nodes.
-# Default ROSA workers stay 2× m6a.xlarge; AI capacity is on-demand Karpenter.
+# Default ROSA workers stay multi-AZ m6a.xlarge floor; AI capacity is on-demand Karpenter.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -69,7 +69,7 @@ wait_csv_succeeded() {
 # ─── nodepools (BEFORE heavy AI install) ─────────────────────────────
 step_nodepools() {
   log "Step nodepools — Karpenter CPU + GPU on-demand (Phase 2 only)"
-  echo "Risk: without these, 2× m6a.xlarge often hits Insufficient cpu during RHOAI install."
+  echo "Risk: without these, the m6a.xlarge platform floor often hits Insufficient cpu during RHOAI install."
   echo "Undo: oc delete nodepool rhoai-cpu-ondemand rhoai-gpu-ondemand"
 
   if ! oc get crd nodepools.karpenter.sh >/dev/null 2>&1 && ! oc get crd nodepools.karpenter.k8s.aws >/dev/null 2>&1; then
@@ -381,8 +381,9 @@ step_verify() {
 
 # ─── main ────────────────────────────────────────────────────────────
 log "Phase 2 — OpenShift AI 3.5 platform-ready"
-echo "Guide: INSTALL.md | SPEC.md | Resume: --from=nodepools|nfd_gpu|rhods|sno|hardware|verify"
+echo "Guide: INSTALL.md | Resume: --from=nodepools|nfd_gpu|rhods|sno|hardware|verify"
 prepare_kube
+ensure_dependency_repos phase2
 
 should_run nodepools && step_nodepools
 should_run nfd_gpu && step_nfd_gpu

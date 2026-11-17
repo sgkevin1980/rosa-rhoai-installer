@@ -135,3 +135,132 @@ run_logged() {
   echo "+ $*" >>"$logfile"
   "$@" 2>&1 | tee -a "$logfile"
 }
+
+_dir_is_effectively_empty() {
+  local d="$1" n
+  [[ -d "$d" ]] || return 1
+  n="$(find "$d" -mindepth 1 -maxdepth 1 ! -name '.DS_Store' 2>/dev/null | wc -l | tr -d ' ')"
+  [[ "$n" -eq 0 ]]
+}
+
+# Clone dest from url if missing; fix empty dirs; detect accidental nested clones.
+# Optional marker_rel: relative file that must exist for the checkout to be valid.
+# Optional ref: branch/tag to clone (default: remote HEAD / main).
+# Human messages go to stderr; stdout is ONLY the resolved path (for capture).
+ensure_git_clone() {
+  local dest="$1" url="$2" marker_rel="${3:-}" ref="${4:-}"
+  local nest marker nested_marker clone_args
+
+  require_cmd git
+  mkdir -p "$(dirname "$dest")"
+
+  marker=""
+  nested_marker=""
+  if [[ -n "$marker_rel" ]]; then
+    marker="${dest}/${marker_rel}"
+    nest="${dest}/$(basename "$dest")"
+    nested_marker="${nest}/${marker_rel}"
+  fi
+
+  # Accidental: git clone url into an already-named empty/parent folder → nested tree
+  if [[ -n "$nested_marker" && -f "$nested_marker" && ! -f "$marker" ]]; then
+    warn "Found nested clone at ${nest} — using it (common if clone landed inside an empty folder)." >&2
+    printf '%s\n' "$nest"
+    return 0
+  fi
+
+  if [[ -n "$marker_rel" && -f "$marker" ]]; then
+    ok "Dependency present: $dest" >&2
+    printf '%s\n' "$dest"
+    return 0
+  fi
+  if [[ -z "$marker_rel" && -d "$dest/.git" ]]; then
+    ok "Dependency present: $dest" >&2
+    printf '%s\n' "$dest"
+    return 0
+  fi
+
+  if [[ -d "$dest" ]]; then
+    if _dir_is_effectively_empty "$dest"; then
+      warn "Removing empty placeholder: $dest" >&2
+      rmdir "$dest" 2>/dev/null || rm -rf "$dest"
+    else
+      die "Directory exists but looks incomplete: $dest
+Expected marker: ${marker_rel:-.git}
+Fix: move/rename that folder, then re-run (installer will clone ${url}).
+Or set the matching *_DIR env var to a valid checkout."
+    fi
+  fi
+
+  log "Cloning dependency → $dest" >&2
+  echo "  from $url${ref:+ (ref $ref)}" >&2
+  clone_args=(clone --depth 1)
+  [[ -n "$ref" ]] && clone_args+=(--branch "$ref")
+  clone_args+=("$url" "$dest")
+  git "${clone_args[@]}" >&2
+  if [[ -n "$marker_rel" && ! -f "${dest}/${marker_rel}" ]]; then
+    die "Clone succeeded but missing ${marker_rel} under $dest — wrong URL or repo layout changed."
+  fi
+  ok "Cloned $dest" >&2
+  printf '%s\n' "$dest"
+}
+
+# Upstream rh-mobb #86 passes var.channel_group without declaring it — plan fails. Patch locally.
+repair_validated_pattern_channel_group() {
+  local root="${1:-$VALIDATED_PATTERN_DIR}"
+  local main_tf="${root}/terraform/10-main.tf"
+  local vars_tf="${root}/terraform/01-variables.tf"
+
+  [[ -f "$main_tf" && -f "$vars_tf" ]] || return 0
+  grep -q 'var\.channel_group' "$main_tf" || return 0
+  if grep -q 'variable[[:space:]]*"channel_group"' "$vars_tf"; then
+    return 0
+  fi
+
+  warn "Patching upstream gap: declare missing variable \"channel_group\" (rh-mobb #86)." >&2
+  cat >>"$vars_tf" <<'EOF'
+
+# --- patched by rosa-rhoai-installer (upstream #86 omitted this declaration) ---
+variable "channel_group" {
+  description = "Channel group for OpenShift version (stable, fast, candidate, nightly)."
+  type        = string
+  default     = "stable"
+  nullable    = false
+}
+EOF
+  ok "Patched ${vars_tf}" >&2
+}
+
+# Ensure Phase-1/Phase-2 sibling repos exist next to rosa-rhoai-installer/
+ensure_dependency_repos() {
+  local need_phase2="${1:-all}" # all|phase1|phase2
+  local resolved
+
+  case "$need_phase2" in
+    all|phase1|phase2) ;;
+    *) die "ensure_dependency_repos: need all|phase1|phase2 (got $need_phase2)" ;;
+  esac
+
+  if [[ "$need_phase2" == "all" || "$need_phase2" == "phase1" ]]; then
+    # Clone once if missing — re-pull manually: git -C "$VALIDATED_PATTERN_DIR" pull
+    resolved="$(ensure_git_clone "$VALIDATED_PATTERN_DIR" "$VALIDATED_PATTERN_GIT_URL" "Makefile" "$VALIDATED_PATTERN_GIT_REF")"
+    VALIDATED_PATTERN_DIR="$resolved"
+    export VALIDATED_PATTERN_DIR
+
+    if ! grep -q 'cluster\.%:' "${VALIDATED_PATTERN_DIR}/Makefile"; then
+      die "Makefile in $VALIDATED_PATTERN_DIR has no cluster.% rule — wrong repo.
+Clone: git clone ${VALIDATED_PATTERN_GIT_URL} ${VALIDATED_PATTERN_DIR}"
+    fi
+    echo "ROSA Terraform pattern: $VALIDATED_PATTERN_DIR ($(git -C "$VALIDATED_PATTERN_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown))"
+    repair_validated_pattern_channel_group "$VALIDATED_PATTERN_DIR"
+  fi
+
+  if [[ "$need_phase2" == "all" || "$need_phase2" == "phase2" ]]; then
+    resolved="$(ensure_git_clone "$SNO_GUIDE_DIR" "$SNO_GUIDE_GIT_URL" "scripts/sno-enable-all-features-35.sh")"
+    SNO_GUIDE_DIR="$resolved"
+    export SNO_GUIDE_DIR
+    resolved="$(ensure_git_clone "$TOOLKIT_DIR" "$TOOLKIT_GIT_URL" "lib/manifests/rhoai/hardware-profile-gpu.yaml")"
+    TOOLKIT_DIR="$resolved"
+    export TOOLKIT_DIR
+  fi
+}
