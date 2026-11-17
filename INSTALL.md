@@ -172,7 +172,41 @@ Success: Console / API / admin password printed and saved under `state/access-*.
 
 ```bash
 cat state/access-*.txt
-# or: cd ../validated-pattern-terraform-rosa && make cluster.<name>.show-credentials
+```
+
+### Retrieve login password later (AWS Secrets Manager)
+
+Easiest (uses Terraform outputs → Secrets Manager):
+
+```bash
+cd /path/to/validated-pattern-terraform-rosa
+export AWS_PROFILE=rhdp_demo
+make cluster.<name>.show-credentials
+```
+
+Or read the secret directly (name is usually `<cluster-name>-credentials`):
+
+```bash
+export AWS_PROFILE=rhdp_demo
+export AWS_REGION=ap-northeast-1   # cluster region
+
+# List / confirm secret name
+aws secretsmanager list-secrets \
+  --query "SecretList[?contains(Name, '<name>')].Name" --output text
+
+# JSON secret: {"user","password","url"}
+aws secretsmanager get-secret-value \
+  --secret-id '<name>-credentials' \
+  --query SecretString --output text | jq -r '"user=\(.user)\npassword=\(.password)\nurl=\(.url // empty)"'
+```
+
+Then login:
+
+```bash
+cd /path/to/validated-pattern-terraform-rosa
+make cluster.<name>.login          # writes ~/.kube/config (not clusters/<name>/kubeconfig)
+export KUBECONFIG="$HOME/.kube/config"
+oc whoami
 ```
 
 ---
