@@ -265,6 +265,7 @@ Phase 2 operator uninstall is best-effort; **destroy the cluster** for a clean r
 | Spot / Unauthorized on NodeClaim | Expected on some orgs — pools are on-demand only |
 | Insufficient CPU during AI install | NodePools first; or scale workers to 4 |
 | AutoNode CRDs missing | `rosa edit cluster --autonode=enabled --autonode-iam-role-arn=...` |
+| `No rule to make target 'cluster.<name>.init'` | Wrong cwd or missing sibling `validated-pattern-terraform-rosa`. Clone it next to this installer (see README), or `export VALIDATED_PATTERN_DIR=...`. Do not run that `make` from `rosa-rhoai-installer/` itself. |
 
 ---
 

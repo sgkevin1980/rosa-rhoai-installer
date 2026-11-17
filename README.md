@@ -28,15 +28,32 @@ state/                  # LOCAL ONLY — gitignored runtime data
 tests/smoke.sh          # bash -n + structure checks
 ```
 
-## Sibling repositories
+## Sibling repositories (required)
 
-By default the installer expects these directories **next to** `rosa-rhoai-installer/`:
+This installer is a **wrapper**. It does **not** contain the Terraform Makefiles.  
+By default it expects these directories **next to** `rosa-rhoai-installer/`:
 
-- `validated-pattern-terraform-rosa` — ROSA HCP Terraform pattern  
-- `rhoai-sno-setup-guide` — RHOAI 3.5 enable / MaaS scripts  
-- `RHOAI-Toolkit` — HardwareProfile manifests  
+```text
+parent/
+  rosa-rhoai-installer/                 # this repo
+  validated-pattern-terraform-rosa/     # REQUIRED for Phase 1 (make cluster.<name>.*)
+  rhoai-sno-setup-guide/                # REQUIRED for Phase 2
+  RHOAI-Toolkit/                        # REQUIRED for HardwareProfile
+```
 
-Override with `VALIDATED_PATTERN_DIR`, `SNO_GUIDE_DIR`, or `TOOLKIT_DIR` if your layout differs.
+If you only clone this GitHub repo, Phase 1 fails with:
+
+`make: *** No rule to make target 'cluster.<name>.init'`
+
+because `make` was not run from `validated-pattern-terraform-rosa/` (that repo defines `cluster.%`).
+
+Override paths if needed:
+
+```bash
+export VALIDATED_PATTERN_DIR=/path/to/validated-pattern-terraform-rosa
+export SNO_GUIDE_DIR=/path/to/rhoai-sno-setup-guide
+export TOOLKIT_DIR=/path/to/RHOAI-Toolkit
+```
 
 ## Security
 

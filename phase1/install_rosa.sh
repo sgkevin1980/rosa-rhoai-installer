@@ -431,15 +431,25 @@ step_provision() {
   export RHCS_TOKEN
   rosa_login
 
-  [[ -d "$VALIDATED_PATTERN_DIR" ]] || die "Missing validated-pattern dir: $VALIDATED_PATTERN_DIR"
+  [[ -d "$VALIDATED_PATTERN_DIR" ]] || die "Missing validated-pattern dir: $VALIDATED_PATTERN_DIR
+Clone https://github.com/rh-mobb/validated-pattern-terraform-rosa (or your fork) as a sibling of rosa-rhoai-installer/,
+or set VALIDATED_PATTERN_DIR to that checkout."
+  [[ -f "${VALIDATED_PATTERN_DIR}/Makefile" ]] || die "No Makefile in $VALIDATED_PATTERN_DIR — wrong path (not the Terraform ROSA pattern repo)."
+  if ! grep -q 'cluster\.%:' "${VALIDATED_PATTERN_DIR}/Makefile"; then
+    die "Makefile in $VALIDATED_PATTERN_DIR has no cluster.% rule.
+You are pointing at the wrong repo, or an outdated checkout. Expected validated-pattern-terraform-rosa."
+  fi
   [[ -f "${TFVARS_PATH:-}" ]] || die "Missing terraform.tfvars — re-run with --from=inputs"
+  [[ -d "${CLUSTER_DIR:-}" ]] || die "Missing cluster dir ${CLUSTER_DIR:-} — re-run with --from=inputs"
 
   LOG="${LOG_DIR}/provision-${CLUSTER_NAME}-$(timestamp).log"
   log "Step provision — ROSA HCP '${CLUSTER_NAME}' (~35–50 min after apply)"
+  echo "Using Terraform pattern: $VALIDATED_PATTERN_DIR"
   echo "Logs: $LOG"
 
   cd "$VALIDATED_PATTERN_DIR"
-  log "make cluster.${CLUSTER_NAME}.init"
+  # Must run from validated-pattern-terraform-rosa root (defines cluster.<name>.init)
+  log "make cluster.${CLUSTER_NAME}.init  (cwd=$(pwd))"
   run_logged "$LOG" make "cluster.${CLUSTER_NAME}.init"
   log "make cluster.${CLUSTER_NAME}.plan"
   run_logged "$LOG" make "cluster.${CLUSTER_NAME}.plan"
